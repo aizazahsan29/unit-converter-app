@@ -1,26 +1,49 @@
 import streamlit as st
 
-# ---------- Page setup ----------
+# -------------------------------
+# Page setup
+# -------------------------------
 st.set_page_config(page_title="Unit Converter", page_icon="🔄", layout="centered")
 st.title("🔄 Unit Converter")
-st.caption("Simple, fast conversions for Length, Mass, Volume, and Temperature.")
+st.caption("Convert between common units for Length, Mass, Volume, and Temperature.")
 
-# ---------- Conversion data ----------
-# Length -> base meter
+# -------------------------------
+# Conversion data
+# -------------------------------
+# Length -> base: meter (m)
 LENGTH_TO_M = {
-    "km": 1000.0, "m": 1.0, "cm": 0.01, "mm": 0.001,
-    "in": 0.0254, "ft": 0.3048, "yd": 0.9144, "mi": 1609.344,
+    "km": 1000.0,
+    "m": 1.0,
+    "cm": 0.01,
+    "mm": 0.001,
+    "in": 0.0254,
+    "ft": 0.3048,
+    "yd": 0.9144,
+    "mi": 1609.344,
 }
-# Mass -> base kilogram
+
+# Mass -> base: kilogram (kg)
 MASS_TO_KG = {
-    "t (metric tonne)": 1000.0, "kg": 1.0, "g": 0.001, "mg": 1e-6,
-    "lb": 0.45359237, "oz": 0.028349523125,
+    "t (metric tonne)": 1000.0,
+    "kg": 1.0,
+    "g": 0.001,
+    "mg": 1e-6,
+    "lb": 0.45359237,
+    "oz": 0.028349523125,
 }
-# Volume -> base liter
+
+# Volume -> base: liter (L)
 VOLUME_TO_L = {
-    "L": 1.0, "mL": 0.001, "gal_us": 3.785411784, "qt_us": 0.946352946,
-    "pt_us": 0.473176473, "cup_us": 0.2365882365, "fl_oz_us": 0.0295735295625,
+    "L": 1.0,
+    "mL": 0.001,
+    "gal_us": 3.785411784,
+    "qt_us": 0.946352946,
+    "pt_us": 0.473176473,
+    "cup_us": 0.2365882365,
+    "fl_oz_us": 0.0295735295625,
 }
+
+# Temperature handled with formulas
 TEMP_UNITS = ["Celsius", "Fahrenheit", "Kelvin"]
 
 CATEGORIES = ["Length", "Mass", "Volume", "Temperature"]
@@ -30,20 +53,36 @@ CATEGORY_MAP = {
     "Volume": VOLUME_TO_L,
 }
 
-# ---------- Helpers ----------
+DEFAULTS = {
+    "Length": ("m", "ft"),
+    "Mass": ("kg", "lb"),
+    "Volume": ("L", "gal_us"),
+    "Temperature": ("Celsius", "Fahrenheit"),
+}
+
+# -------------------------------
+# Helper functions
+# -------------------------------
 def units_for_category(cat: str):
     return TEMP_UNITS if cat == "Temperature" else list(CATEGORY_MAP[cat].keys())
 
 def convert_temperature(val, from_u, to_u):
     # to Celsius
-    if from_u == "Celsius": c = val
-    elif from_u == "Fahrenheit": c = (val - 32.0) * 5.0 / 9.0
-    elif from_u == "Kelvin": c = val - 273.15
-    else: return None
+    if from_u == "Celsius":
+        c = val
+    elif from_u == "Fahrenheit":
+        c = (val - 32.0) * 5.0 / 9.0
+    elif from_u == "Kelvin":
+        c = val - 273.15
+    else:
+        return None
     # from Celsius
-    if to_u == "Celsius": return c
-    if to_u == "Fahrenheit": return c * 9.0 / 5.0 + 32.0
-    if to_u == "Kelvin": return c + 273.15
+    if to_u == "Celsius":
+        return c
+    if to_u == "Fahrenheit":
+        return c * 9.0 / 5.0 + 32.0
+    if to_u == "Kelvin":
+        return c + 273.15
     return None
 
 def convert_value(category, from_unit, to_unit, value):
@@ -51,59 +90,67 @@ def convert_value(category, from_unit, to_unit, value):
         x = float(value)
     except (TypeError, ValueError):
         return None
+
     if category == "Temperature":
+        if from_unit not in TEMP_UNITS or to_unit not in TEMP_UNITS:
+            return None
         return convert_temperature(x, from_unit, to_unit)
+
+    # multiplicative categories
     factors = CATEGORY_MAP[category]
+    if from_unit not in factors or to_unit not in factors:
+        return None
     base = x * factors[from_unit]      # to base
     return base / factors[to_unit]     # to target
 
-# ---------- UI state ----------
-if "history" not in st.session_state:
-    st.session_state.history = []
+def fmt(num, decimals):
+    try:
+        return f"{num:.{decimals}f}"
+    except Exception:
+        return str(num)
 
-# ---------- UI ----------
-with st.container():
-    colA, colB = st.columns(2)
-    category = colA.selectbox("Category", CATEGORIES, index=0)
-    precision = colB.number_input("Decimal places", min_value=0, max_value=10, value=4, step=1)
+# -------------------------------
+# Session state (to support swap)
+# -------------------------------
+if "selections" not in st.session_state:
+    st.session_state.selections = {k: {"from": v[0], "to": v[1]} for k, v in DEFAULTS.items()}
 
-    units = units_for_category(category)
-    default_from = ("m" if category == "Length" else
-                    "kg" if category == "Mass" else
-                    "L" if category == "Volume" else
-                    "Celsius")
-    default_to = ("ft" if category == "Length" else
-                  "lb" if category == "Mass" else
-                  "gal_us" if category == "Volume" else
-                  "Fahrenheit")
+# -------------------------------
+# UI
+# -------------------------------
+col_top_a, col_top_b = st.columns([2, 1])
+category = col_top_a.selectbox("Category", CATEGORIES, index=0)
+precision = col_top_b.number_input("Decimal places", min_value=0, max_value=10, value=4, step=1)
 
-    col1, col2 = st.columns([3, 1])
-    from_unit = col1.selectbox("From unit", units, index=units.index(default_from) if default_from in units else 0, key=f"from_{category}")
-    to_unit = col1.selectbox("To unit", units, index=units.index(default_to) if default_to in units else min(1, len(units)-1), key=f"to_{category}")
+units = units_for_category(category)
+# Ensure stored units exist for current category; if not, reset to defaults
+if st.session_state.selections[category]["from"] not in units:
+    st.session_state.selections[category]["from"] = DEFAULTS[category][0]
+if st.session_state.selections[category]["to"] not in units:
+    st.session_state.selections[category]["to"] = DEFAULTS[category][1]
 
-    if col2.button("↔️ Swap"):
-        from_unit, to_unit = to_unit, from_unit
-        # re-render with swapped defaults by updating session state
-        st.session_state[f"from_{category}"] = from_unit
-        st.session_state[f"to_{category}"] = to_unit
-        st.experimental_rerun()
+col_units, col_swap = st.columns([4, 1])
+from_unit = col_units.selectbox("From unit", units, index=units.index(st.session_state.selections[category]["from"]))
+to_unit = col_units.selectbox("To unit", units, index=units.index(st.session_state.selections[category]["to"]))
 
-    value = st.number_input("Value", value=1.0, format="%.6f")
+if col_swap.button("↔️ Swap"):
+    st.session_state.selections[category]["from"], st.session_state.selections[category]["to"] = (
+        to_unit, from_unit
+    )
+    st.rerun()
 
-    if st.button("Convert"):
-        y = convert_value(category, from_unit, to_unit, value)
-        if y is None:
-            st.error("Please enter a valid number.")
-        else:
-            out = f"{value} {from_unit} = {round(y, precision)} {to_unit}"
-            st.success(out)
-            st.session_state.history.insert(0, out)
+value = st.number_input("Value", value=1.0, step=1.0, format="%.6f")
+
+if st.button("Convert"):
+    # persist latest selections
+    st.session_state.selections[category]["from"] = from_unit
+    st.session_state.selections[category]["to"] = to_unit
+
+    result = convert_value(category, from_unit, to_unit, value)
+    if result is None:
+        st.error("Please enter a valid number and make sure units/category are supported.")
+    else:
+        st.success(f"{fmt(value, precision)} {from_unit} = {fmt(result, precision)} {to_unit}")
 
 st.divider()
-st.subheader("🧾 Recent conversions")
-if st.session_state.history:
-    for i, row in enumerate(st.session_state.history[:8], start=1):
-        st.write(f"{i}. {row}")
-else:
-    st.caption("No conversions yet. Try one above!")
-
+st.caption("Tip: You can change the number of decimal places from the top-right selector.")
